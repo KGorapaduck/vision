@@ -125,20 +125,20 @@ names:
 # ==========================================
 # [4단계: YOLO 모델 로드 및 학습]
 # ==========================================
-def train_model():
+def train_model(version_name):
     # 사전 학습된 YOLOv8n(Nano) 모델 가중치를 인터넷에서 로컬로 다운로드 및 로드
     model = YOLO('yolov8n.pt')
     
-    print("Starting training...")
-    # data.yaml의 설정을 읽어 30 에폭 동안 학습 (이미지 크기 200x200)
-    results = model.train(data='data.yaml', epochs=30, imgsz=200)
+    print(f"Starting training for version: steel_yolov8n_{version_name}...")
+    # data.yaml의 설정을 읽어 30 에폭 동안 학습 (이미지 크기 200x200), name 매개변수로 버전 구분
+    results = model.train(data='data.yaml', epochs=30, imgsz=200, name=f"steel_yolov8n_{version_name}")
     return model
 
 
 # ==========================================
 # [5단계: 학습 완료 모델 검증 및 추론 결과 시각화]
 # ==========================================
-def validate_and_visualize(model_path='runs/detect/train/weights/best.pt'):
+def validate_and_visualize(model_path):
     """
     학습된 최적 가중치를 불러와 검증 데이터셋에 대해 성능을 평가하고 예측 이미지를 시각화합니다.
     """
@@ -167,12 +167,19 @@ def validate_and_visualize(model_path='runs/detect/train/weights/best.pt'):
     print(f'Precision: {metrics.box.mp:.3f}')
     print(f'Recall: {metrics.box.mr:.3f}')
 
-
 if __name__ == '__main__':
     # 훈련에 필요한 데이터 폴더가 있는지 체크 후 가공 단계 실행
     if os.path.exists(BASEDIR):
+        # 1. 사용자로부터 직접 모델 버전 이름 입력받기
+        version_name = input("학습할 모델의 버전 이름을 입력해 주세요 (예: v1_base, v2_augmented): ").strip()
+        if not version_name:
+            version_name = "default"
+            
         prepare_dataset()
-        model = train_model()
-        validate_and_visualize()
+        model = train_model(version_name)
+        
+        # 2. 입력된 버전에 따른 가중치 경로 자동 빌드 후 성능 평가 진행
+        best_model_path = f"runs/detect/steel_yolov8n_{version_name}/weights/best.pt"
+        validate_and_visualize(best_model_path)
     else:
         print(f"'{BASEDIR}' 폴더가 존재하지 않습니다. 먼저 원본 데이터셋을 다운로드해 주세요.")

@@ -207,11 +207,11 @@ marimo/_lsp/
 __marimo__/
 
 # Custom project ignores
-rawdata/
-datasets/
-runs/
-*.pt
-*.engine
+**/rawdata/
+**/datasets/
+**/runs/
+**/*.pt
+**/*.engine
 .venv/
 .conda/
 *.log
