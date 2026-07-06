@@ -9,7 +9,7 @@ import cv2
 # ==========================================
 # [설정 정의]
 # ==========================================
-BASEDIR = 'rawdata'  # 다운로드받은 원본 NEU-DET 데이터가 들어있는 폴더
+BASEDIR = 'rawdata/NEU-DET'  # 다운로드받은 원본 NEU-DET 데이터가 들어있는 폴더
 OUTPUTDIR = 'datasets/NEU-DET-YOLO'  # YOLO 포맷으로 변환되어 저장될 경로
 
 # NEU-DET 데이터셋이 가진 6가지 결함 종류 정의
@@ -86,10 +86,12 @@ def process_folder(split_name, source_split_name):
             with open(os.path.join(label_dest, txt_filename), 'w') as f:
                 f.write('\n'.join(yolo_data))
                 
-            # 이미지 복사
+            # 이미지 복사 (클래스별 서브디렉토리 구조 반영)
             img_filename_jpg = xml_file.replace('.xml', '.jpg')
-            if os.path.exists(os.path.join(img_source, img_filename_jpg)):
-                shutil.copy(os.path.join(img_source, img_filename_jpg), os.path.join(img_dest, img_filename_jpg))
+            class_name = xml_file.rsplit('_', 1)[0]
+            actual_img_path = os.path.join(img_source, class_name, img_filename_jpg)
+            if os.path.exists(actual_img_path):
+                shutil.copy(actual_img_path, os.path.join(img_dest, img_filename_jpg))
                 
         except Exception as e:
             print(f'Error processing {xml_file}: {e}')
@@ -131,8 +133,9 @@ def train_model(version_name):
     
     print(f"Starting training for version: steel_yolov8n_{version_name}...")
     # data.yaml의 설정을 읽어 30 에폭 동안 학습 (이미지 크기 200x200), name 매개변수로 버전 구분
-    results = model.train(data='data.yaml', epochs=30, imgsz=200, name=f"steel_yolov8n_{version_name}")
-    return model
+    # 중복 실행 시 폴더 추가 생성 방지를 위해 exist_ok=True 명시
+    results = model.train(data='data.yaml', epochs=30, imgsz=200, exist_ok=True, name=f"steel_yolov8n_{version_name}")
+    return model, results.save_dir
 
 
 # ==========================================
@@ -176,10 +179,10 @@ if __name__ == '__main__':
             version_name = "default"
             
         prepare_dataset()
-        model = train_model(version_name)
+        model, save_dir = train_model(version_name)
         
         # 2. 입력된 버전에 따른 가중치 경로 자동 빌드 후 성능 평가 진행
-        best_model_path = f"runs/detect/steel_yolov8n_{version_name}/weights/best.pt"
+        best_model_path = os.path.join(save_dir, 'weights', 'best.pt')
         validate_and_visualize(best_model_path)
     else:
         print(f"'{BASEDIR}' 폴더가 존재하지 않습니다. 먼저 원본 데이터셋을 다운로드해 주세요.")

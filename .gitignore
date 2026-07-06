@@ -215,4 +215,5 @@ __marimo__/
 .venv/
 .conda/
 *.log
+*.db
 
