@@ -30,7 +30,8 @@ def run_inference_pipeline(version_name):
     
     # 3. 전체 검증 데이터셋에 대한 공식 평가 지표 획득 (val)
     logging.info("검증 데이터셋(Validation Set) 평가 시작...")
-    metrics = model.val(data='data.yaml', plots=False)
+    # exist_ok=True를 추가해 val 폴더 복제 증식 방지
+    metrics = model.val(data='data.yaml', plots=True, exist_ok=True,name=f"val_{version_name}")
     
     precision = float(metrics.box.mp)
     recall = float(metrics.box.mr)
