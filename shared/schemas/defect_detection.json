@@ -5,20 +5,20 @@
   "properties": {
     "model_version": {
       "type": "string",
-      "description": "Version of the YOLO model used for inference"
+      "description": "추론에 사용된 YOLO 모델의 버전"
     },
     "filename": {
       "type": "string",
-      "description": "Name of the analyzed image file"
+      "description": "분석 대상 이미지 파일명"
     },
     "image_path": {
       "type": "string",
-      "description": "Absolute or relative path to the image"
+      "description": "이미지 파일의 절대 혹은 상대 물리 경로"
     },
     "timestamp": {
       "type": "string",
       "format": "date-time",
-      "description": "Inference completion timestamp in ISO 8601 format"
+      "description": "추론이 완료된 시점의 ISO 8601 형식 타임스탬프"
     },
     "image_size": {
       "type": "object",
@@ -30,11 +30,11 @@
     },
     "inference_time_ms": {
       "type": "number",
-      "description": "Time taken for inference in milliseconds"
+      "description": "밀리초(ms) 단위의 추론 소요 시간"
     },
     "has_defect": {
       "type": "boolean",
-      "description": "True if at least one defect was detected"
+      "description": "결함이 1개 이상 검출되었는지 여부 (참/거짓)"
     },
     "defects": {
       "type": "array",
