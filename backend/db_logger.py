@@ -1,8 +1,15 @@
 import sqlite3
 import os
+import sys
 from datetime import datetime
 
-DB_PATH = 'steel_defects.db'
+# Ensure parent directory is in sys.path to allow imports from shared
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
+
+from shared.config import DB_PATH
 
 def get_db_connection():
     """SQLite 데이터베이스 연결을 생성하여 반환합니다."""
@@ -14,6 +21,9 @@ def init_db():
     """데이터베이스 테이블이 없을 경우 자동으로 테이블을 초기화 생성합니다."""
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # 외래 키 제약 조건 활성화
+    cursor.execute('PRAGMA foreign_keys = ON;')
     
     # 1. inference_runs 테이블 생성 (각 훈련/검증 세션 요약)
     cursor.execute('''
@@ -50,23 +60,6 @@ def init_db():
     conn.close()
     print("SQLite Database initialized successfully.")
 
-def calculate_severity(confidence, box_width, box_height):
-    """
-    결함의 심각도를 자동 판정하는 로직입니다.
-    - YOLOv8 좌표계는 0~1로 정규화되어 있으므로, box_width * box_height 가 면적 비율(area_ratio)이 됩니다.
-    - 면적 비율이 10% 이상이거나 신뢰도(Confidence)가 0.9 이상이면 'HIGH'
-    - 면적 비율이 5% 이상이거나 신뢰도(Confidence)가 0.7 이상이면 'MEDIUM'
-    - 그 외에는 'LOW'로 판정합니다.
-    """
-    area_ratio = box_width * box_height
-    
-    if area_ratio >= 0.10 or confidence >= 0.90:
-        return 'HIGH'
-    elif area_ratio >= 0.05 or confidence >= 0.70:
-        return 'MEDIUM'
-    else:
-        return 'LOW'
-
 def insert_inference_run(model_version, total_images, total_defects, precision, recall, map50):
     """검증 실행 요약 정보를 저장하고 고유 run_id를 반환합니다."""
     conn = get_db_connection()
@@ -93,6 +86,7 @@ def insert_defect_details(defect_list):
         
     conn = get_db_connection()
     cursor = conn.cursor()
+    cursor.execute('PRAGMA foreign_keys = ON;')
     
     cursor.executemany('''
         INSERT INTO defect_details (
@@ -105,3 +99,4 @@ def insert_defect_details(defect_list):
     conn.commit()
     conn.close()
     print(f"Logged {len(defect_list)} defect details to DB.")
+

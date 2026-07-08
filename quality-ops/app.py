@@ -4,16 +4,29 @@ from PIL import Image
 import numpy as np
 import cv2
 
+import os
+import sys
+
+# Ensure parent directory is in sys.path to allow imports from shared
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
+
 # -----------------------------------------------
 # Configuration
 # -----------------------------------------------
-MODEL_PATH = r"defectdetector.pt"
+# 기본 학습 결과 가중치 경로 설정 (실패 시 루트의 yolov8n.pt로 폴백)
+MODEL_PATH = os.path.join(REPO_ROOT, "runs", "detect", "steel_yolov8n_v1_base", "weights", "best.pt")
+if not os.path.exists(MODEL_PATH):
+    MODEL_PATH = os.path.join(REPO_ROOT, "yolov8n.pt")
 
 try:
     model = YOLO(MODEL_PATH)
 except Exception as e:
-    st.error(f"Error loading model: {e}")
+    st.error(f"Error loading model from {MODEL_PATH}: {e}")
     st.stop()
+
 
 # -----------------------------------------------
 # Page Setup

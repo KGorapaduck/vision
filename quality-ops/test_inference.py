@@ -2,15 +2,22 @@ import os
 import sys
 import logging
 from ultralytics import YOLO
-from db_logger import init_db, insert_inference_run, insert_defect_details, calculate_severity
+
+# Ensure parent directory is in sys.path to allow imports from shared and backend
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
+
+from shared.config import LOG_FILE_PATH, DATASETS_DIR, calculate_severity
+from backend.db_logger import init_db, insert_inference_run, insert_defect_details
 
 # 로그 설정 (콘솔 및 파일 동시 출력)
-LOG_FILE = 'defect_detection.log'
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.FileHandler(LOG_FILE_PATH, encoding='utf-8'),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -20,7 +27,7 @@ def run_inference_pipeline(version_name):
     init_db()
     
     # 2. 모델 경로 빌드
-    model_path = f"runs/detect/steel_yolov8n_{version_name}/weights/best.pt"
+    model_path = os.path.join(REPO_ROOT, "runs", "detect", f"steel_yolov8n_{version_name}", "weights", "best.pt")
     if not os.path.exists(model_path):
         logging.error(f"모델 파일을 찾을 수 없습니다: {model_path}")
         return
@@ -31,7 +38,8 @@ def run_inference_pipeline(version_name):
     # 3. 전체 검증 데이터셋에 대한 공식 평가 지표 획득 (val)
     logging.info("검증 데이터셋(Validation Set) 평가 시작...")
     # exist_ok=True를 추가해 val 폴더 복제 증식 방지
-    metrics = model.val(data='data.yaml', plots=True, exist_ok=True,name=f"val_{version_name}")
+    data_yaml_path = os.path.join(REPO_ROOT, 'data.yaml')
+    metrics = model.val(data=data_yaml_path, plots=True, exist_ok=True, name=f"val_{version_name}")
     
     precision = float(metrics.box.mp)
     recall = float(metrics.box.mr)
@@ -45,7 +53,7 @@ def run_inference_pipeline(version_name):
     logging.info(f"=========================")
 
     # 4. 이미지 개별 추론 수행 (predict) -> 개별 결함 목록 추출
-    val_images_path = 'datasets/NEU-DET-YOLO/images/val'
+    val_images_path = os.path.join(DATASETS_DIR, 'NEU-DET-YOLO', 'images', 'val')
     logging.info(f"검증 이미지 추론 실행 중: {val_images_path}")
     results = model.predict(source=val_images_path, conf=0.25, save=False)
     
@@ -101,7 +109,7 @@ def run_inference_pipeline(version_name):
     logging.info(f"Run ID: {run_id}")
     logging.info(f"총 이미지 수: {total_images}")
     logging.info(f"총 검출 결함 수: {total_defects}")
-    logging.info(f"결함 세부 로그가 '{LOG_FILE}' 및 SQLite DB에 기록되었습니다.")
+    logging.info(f"결함 세부 로그가 '{LOG_FILE_PATH}' 및 SQLite DB에 기록되었습니다.")
     logging.info(f"============================")
 
 if __name__ == '__main__':
@@ -109,3 +117,4 @@ if __name__ == '__main__':
     if not version:
         version = "v1_base"
     run_inference_pipeline(version)
+

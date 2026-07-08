@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import xml.etree.ElementTree as ET
 from tqdm import tqdm
@@ -6,14 +7,20 @@ from ultralytics import YOLO
 import matplotlib.pyplot as plt
 import cv2
 
+# Ensure parent directory is in sys.path to allow imports from shared
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
+
+from shared.config import DEFECT_CLASSES, RAW_DATA_DIR, DATASETS_DIR
+
 # ==========================================
 # [설정 정의]
 # ==========================================
-BASEDIR = 'rawdata/NEU-DET'  # 다운로드받은 원본 NEU-DET 데이터가 들어있는 폴더
-OUTPUTDIR = 'datasets/NEU-DET-YOLO'  # YOLO 포맷으로 변환되어 저장될 경로
-
-# NEU-DET 데이터셋이 가진 6가지 결함 종류 정의
-CLASSES = ['crazing', 'inclusion', 'patches', 'pitted_surface', 'rolled-in_scale', 'scratches']
+BASEDIR = os.path.join(RAW_DATA_DIR, 'NEU-DET')  # 다운로드받은 원본 NEU-DET 데이터가 들어있는 폴더
+OUTPUTDIR = os.path.join(DATASETS_DIR, 'NEU-DET-YOLO')  # YOLO 포맷으로 변환되어 저장될 경로
+CLASSES = DEFECT_CLASSES
 
 
 # ==========================================
@@ -107,34 +114,36 @@ def prepare_dataset():
     print(f'Data is ready at {OUTPUTDIR}')
 
     # YOLO 학습에 필요한 데이터셋 정보 YAML 파일 자동 작성
-    yaml_content = """path: ./datasets/NEU-DET-YOLO
+    # 경로를 절대 경로 형태로 보정하여 하위 디렉터리 실행 대응
+    yaml_content = f"""path: {OUTPUTDIR}
 train: images/train
 val: images/val
 
 names:
-  0: crazing
-  1: inclusion
-  2: patches
-  3: pitted_surface
-  4: rolled-in_scale
-  5: scratches
 """
-    with open('data.yaml', 'w') as f:
+    for idx, name in enumerate(CLASSES):
+        yaml_content += f"  {idx}: {name}\n"
+
+    data_yaml_path = os.path.join(REPO_ROOT, 'data.yaml')
+    with open(data_yaml_path, 'w') as f:
         f.write(yaml_content)
-    print('data.yaml has been created!')
+    print(f'data.yaml has been created at {data_yaml_path}!')
 
 
 # ==========================================
 # [4단계: YOLO 모델 로드 및 학습]
 # ==========================================
 def train_model(version_name):
-    # 사전 학습된 YOLOv8n(Nano) 모델 가중치를 인터넷에서 로컬로 다운로드 및 로드
-    model = YOLO('yolov8n.pt')
+    # 사전 학습된 YOLOv8n(Nano) 모델 가중치 로드
+    yolo_model_path = os.path.join(REPO_ROOT, 'yolov8n.pt')
+    model = YOLO(yolo_model_path)
     
     print(f"Starting training for version: steel_yolov8n_{version_name}...")
+    data_yaml_path = os.path.join(REPO_ROOT, 'data.yaml')
+    
     # data.yaml의 설정을 읽어 30 에폭 동안 학습 (이미지 크기 200x200), name 매개변수로 버전 구분
     # 중복 실행 시 폴더 추가 생성 방지를 위해 exist_ok=True 명시
-    results = model.train(data='data.yaml', epochs=30, imgsz=200, exist_ok=True, name=f"steel_yolov8n_{version_name}")
+    results = model.train(data=data_yaml_path, epochs=30, imgsz=200, exist_ok=True, name=f"steel_yolov8n_{version_name}")
     return model, results.save_dir
 
 
@@ -148,7 +157,8 @@ def validate_and_visualize(model_path):
     model = YOLO(model_path)
     
     # 5.1 검증 데이터셋 예측 수행 및 결과 이미지 자동 저장
-    results = model.predict(source='datasets/NEU-DET-YOLO/images/val', conf=0.25, save=True)
+    val_images_path = os.path.join(OUTPUTDIR, 'images', 'val')
+    results = model.predict(source=val_images_path, conf=0.25, save=True)
     
     # 5.2 저장된 폴더에서 샘플 3장을 가져와 Matplotlib으로 화면에 출력
     save_dir = results[0].save_dir
@@ -170,6 +180,7 @@ def validate_and_visualize(model_path):
     print(f'Precision: {metrics.box.mp:.3f}')
     print(f'Recall: {metrics.box.mr:.3f}')
 
+
 if __name__ == '__main__':
     # 훈련에 필요한 데이터 폴더가 있는지 체크 후 가공 단계 실행
     if os.path.exists(BASEDIR):
@@ -186,3 +197,4 @@ if __name__ == '__main__':
         validate_and_visualize(best_model_path)
     else:
         print(f"'{BASEDIR}' 폴더가 존재하지 않습니다. 먼저 원본 데이터셋을 다운로드해 주세요.")
+
