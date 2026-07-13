@@ -93,12 +93,18 @@ def process_folder(split_name, source_split_name):
             with open(os.path.join(label_dest, txt_filename), 'w') as f:
                 f.write('\n'.join(yolo_data))
                 
-            # 이미지 복사 (클래스별 서브디렉토리 구조 반영)
+            # 이미지 복사 대신 CLAHE 전처리 적용 후 저장 (클래스별 서브디렉토리 구조 반영)
             img_filename_jpg = xml_file.replace('.xml', '.jpg')
             class_name = xml_file.rsplit('_', 1)[0]
             actual_img_path = os.path.join(img_source, class_name, img_filename_jpg)
             if os.path.exists(actual_img_path):
-                shutil.copy(actual_img_path, os.path.join(img_dest, img_filename_jpg))
+                img = cv2.imread(actual_img_path, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+                    enhanced_img = clahe.apply(img)
+                    cv2.imwrite(os.path.join(img_dest, img_filename_jpg), enhanced_img)
+                else:
+                    shutil.copy(actual_img_path, os.path.join(img_dest, img_filename_jpg))
                 
         except Exception as e:
             print(f'Error processing {xml_file}: {e}')
@@ -143,7 +149,15 @@ def train_model(version_name):
     
     # data.yaml의 설정을 읽어 30 에폭 동안 학습 (이미지 크기 200x200), name 매개변수로 버전 구분
     # 중복 실행 시 폴더 추가 생성 방지를 위해 exist_ok=True 명시
-    results = model.train(data=data_yaml_path, epochs=30, imgsz=200, exist_ok=True, name=f"steel_yolov8n_{version_name}")
+    results = model.train(
+        data=data_yaml_path,
+        epochs=50,
+        imgsz=640,
+        degrees=15.0,
+        flipud=0.5,
+        exist_ok=True,
+        name=f"steel_yolov8n_{version_name}"
+    )
     return model, results.save_dir
 
 
@@ -184,8 +198,11 @@ def validate_and_visualize(model_path):
 if __name__ == '__main__':
     # 훈련에 필요한 데이터 폴더가 있는지 체크 후 가공 단계 실행
     if os.path.exists(BASEDIR):
-        # 1. 사용자로부터 직접 모델 버전 이름 입력받기
-        version_name = input("학습할 모델의 버전 이름을 입력해 주세요 (예: v1_base, v2_augmented): ").strip()
+        # 1. CLI 인자 존재 시 자동 로드하여 백그라운드 프롬프트 대기 차단
+        if len(sys.argv) > 1:
+            version_name = sys.argv[1].strip()
+        else:
+            version_name = input("학습할 모델의 버전 이름을 입력해 주세요 (예: v1_base, v2_augmented): ").strip()
         if not version_name:
             version_name = "default"
             

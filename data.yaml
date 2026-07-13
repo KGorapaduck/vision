@@ -1,4 +1,4 @@
-path: ./datasets/NEU-DET-YOLO
+path: C:\Users\K\vision\automated-steel-defect-detection\datasets\NEU-DET-YOLO
 train: images/train
 val: images/val
 
