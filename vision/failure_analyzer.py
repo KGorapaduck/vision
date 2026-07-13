@@ -126,7 +126,7 @@ def run_failure_analysis(model_path, output_name, conf_threshold=0.25):
             
             cv2.rectangle(img, (gt_xmin, gt_ymin), (gt_xmax, gt_ymax), (0, 255, 0), 2)
             cv2.putText(img, f"GT:{gt_cls_name}", (gt_xmin, max(20, gt_ymin - 8)), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
             if max_iou < 0.25:
                 has_error = True
@@ -143,13 +143,18 @@ def run_failure_analysis(model_path, output_name, conf_threshold=0.25):
                 
                 cv2.rectangle(img, (p_xmin, p_ymin), (p_xmax, p_ymax), (0, 0, 255), 2)
                 cv2.putText(img, f"PR:{pred_cls_name}({pred_conf:.2f})", (p_xmin, min(h_img - 8, p_ymax + 18)), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 
+                if isinstance(conf_threshold, dict):
+                    target_conf = conf_threshold.get(pred_cls_name, 0.25)
+                else:
+                    target_conf = conf_threshold
+
                 if best_pred["class_id"] != gt_cls:
                     has_error = True
                     error_types.add("misclassified")
                     stats["Misclassified"] += 1
-                elif pred_conf < conf_threshold:
+                elif pred_conf < target_conf:
                     has_error = True
                     error_types.add("low_confidence")
                     stats["LowConfidence"] += 1
@@ -176,6 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-version", type=str, default="v1_base", help="검증할 모델의 버전 이름 (예: v1_base, v2_augmented)")
     parser.add_argument("--output-name", type=str, default=None, help="결과 폴더 이름 (미지정 시 model-version과 동일하게 설정)")
     parser.add_argument("--model-path", type=str, default=None, help="평가할 YOLO 가중치 파일(.pt) 경로 (수동 지정 시 --model-version 무시)")
+    parser.add_argument("--class-thresholds", action="store_true", help="클래스별 개별 임계값(Run 5 셋업) 적용 여부")
     
     args = parser.parse_args()
     
@@ -184,15 +190,44 @@ if __name__ == "__main__":
     if not model_path:
         model_path = os.path.join(REPO_ROOT, "runs", "detect", f"steel_yolov8n_{args.model_version}", "weights", "best.pt")
         
-    # 2. 결과 폴더 식별 이름 자동 조립 또는 수동 로드
+    # 2. 결과 폴더 식별 이름 설정 (CLI 입력이 없으면 터미널에서 대화식으로 질문)
     output_name = args.output_name
     if not output_name:
+        try:
+            # 대화식 입력 프롬프트 제공
+            prompt_msg = f"결과 저장 폴더 이름 식별자({args.model_version}_[입력값])을 입력해 주세요 (Enter 입력 시 기본값 자동 설정): "
+            user_input = input(prompt_msg).strip()
+            if user_input:
+                output_name = f"{args.model_version}_{user_input}"
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
+            pass
+            
+    # 대화식 입력도 생략(Enter)되었을 경우, 기존 자동 완성 규칙 적용
+    if not output_name:
         output_name = args.model_version
+        if args.class_thresholds:
+            output_name = f"{output_name}_tuned"
         
     if os.path.exists(model_path):
-        # 실무 기본 검출 임계값 0.25로 고정 검증 진행
-        run_failure_analysis(model_path, output_name, conf_threshold=0.25)
+        if args.class_thresholds:
+            # 사용자가 지정한 개별 임계값 딕셔너리 적용 (crazing: 0.15, inclusion: 0.20, 등)
+            thresholds = {
+                "crazing": 0.25,
+                "inclusion": 0.25,
+                "patches": 0.25,
+                "pitted_surface": 0.25,
+                "rolled-in_scale": 0.25,
+                "scratches": 0.25
+            }
+            print(f"[INFO] 클래스별 개별 임계값 적용: {thresholds}")
+            run_failure_analysis(model_path, output_name, conf_threshold=thresholds)
+        else:
+            # 실무 기본 검출 임계값 0.25로 고정 검증 진행
+            run_failure_analysis(model_path, output_name, conf_threshold=0.25)
     else:
         print(f"[ERROR] 지정된 모델 파일이 없습니다: {model_path}")
         print("올바른 --model-version 명칭을 입력하셨거나 --model-path 전체 경로가 유효한지 다시 확인해 주세요.")
         sys.exit(1)
+

@@ -22,7 +22,7 @@ logging.basicConfig(
     ]
 )
 
-def run_inference_pipeline(version_name):
+def run_inference_pipeline(version_name, class_thresholds=None):
     # 1. DB 초기화
     init_db()
     
@@ -52,10 +52,25 @@ def run_inference_pipeline(version_name):
     logging.info(f"mAP50: {map50:.4f}")
     logging.info(f"=========================")
 
+    # 클래스별 개별 임계값 정의
+    if class_thresholds is not None:
+        CLASS_THRESHOLDS = class_thresholds
+    else:
+        CLASS_THRESHOLDS = {
+            "crazing": 0.15,
+            "inclusion": 0.20,
+            "patches": 0.25,
+            "pitted_surface": 0.20,
+            "rolled-in_scale": 0.15,
+            "scratches": 0.25
+        }
+
     # 4. 이미지 개별 추론 수행 (predict) -> 개별 결함 목록 추출
     val_images_path = os.path.join(DATASETS_DIR, 'NEU-DET-YOLO', 'images', 'val')
     logging.info(f"검증 이미지 추론 실행 중: {val_images_path}")
-    results = model.predict(source=val_images_path, conf=0.25, save=False)
+    # 클래스별 임계값 중 최솟값을 기준으로 1차 필터링
+    min_conf = min(CLASS_THRESHOLDS.values())
+    results = model.predict(source=val_images_path, conf=min_conf, save=False)
     
     total_images = len(results)
     total_defects = 0
@@ -67,10 +82,16 @@ def run_inference_pipeline(version_name):
         
         if boxes is not None:
             for box in boxes:
-                total_defects += 1
                 cls_id = int(box.cls[0])
                 class_name = model.names[cls_id]
                 confidence = float(box.conf[0])
+                
+                # 클래스별 고유 임계값 적용하여 2차 필터링
+                target_conf = CLASS_THRESHOLDS.get(class_name, 0.25)
+                if confidence < target_conf:
+                    continue  # 임계값 미달 시 적재 대상에서 제외
+                    
+                total_defects += 1
                 
                 # xywh 정규화 좌표 가져오기
                 xywhn = box.xywhn[0].tolist()
