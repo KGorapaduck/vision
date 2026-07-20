@@ -1,6 +1,7 @@
 path: C:\Users\K\vision\automated-steel-defect-detection\datasets\NEU-DET-YOLO
 train: images/train
 val: images/val
+test: images/test
 
 names:
   0: crazing

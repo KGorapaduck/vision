@@ -44,8 +44,9 @@ def run_failure_analysis(model_path, output_name, conf_threshold=0.25):
     val_img_dir = os.path.join(DATASETS_DIR, "NEU-DET-YOLO", "images", "val")
     val_lbl_dir = os.path.join(DATASETS_DIR, "NEU-DET-YOLO", "labels", "val")
     
-    # 지정된 output_name 그대로 결과 저장 폴더 경로 생성
-    output_dir = os.path.join(RUNS_DIR, "detect", f"failure_visuals_{output_name}")
+    # 지정된 output_name에 이미 failure_visuals_ 접두어가 포함되어 있는지 체크하여 중복 생성 방지
+    folder_name = output_name if output_name.startswith("failure_visuals_") else f"failure_visuals_{output_name}"
+    output_dir = os.path.join(RUNS_DIR, "detect", folder_name)
     
     # 디렉토리 생성
     subdirs = ["missed", "misclassified", "low_confidence"]
@@ -205,21 +206,78 @@ if __name__ == "__main__":
     if not output_name:
         output_name = args.model_version
 
-    # 3. 클래스별 임계값 — 변경 시 이 딕셔너리만 직접 수정
-    CLASS_THRESHOLDS = {
-        "crazing":        0.15,
-        "inclusion":      0.20,
-        "patches":        0.25,
-        "pitted_surface": 0.20,
-        "rolled-in_scale":0.15,
-        "scratches":      0.25
+    # 3. 프리셋 정의 (실패 분석 실험 조건)
+    PRESETS = {
+        # v1_base 실험군
+        "v1_base": {
+            "conf": 0.25,
+            "output": "v1_base"
+        },
+        "v1_base_conf0.15": {
+            "conf": 0.15,
+            "output": "v1_base_conf0.15"
+        },
+        "v1_base_indiv_conf": {
+            "conf": {
+                "crazing": 0.15,
+                "inclusion": 0.15,
+                "patches": 0.25,
+                "pitted_surface": 0.20,
+                "rolled-in_scale": 0.15,
+                "scratches": 0.25
+            },
+            "output": "v1_base_indiv_conf"
+        },
+        "v1_base_indiv_conf_inclusion_0.20": {
+            "conf": {
+                "crazing": 0.15,
+                "inclusion": 0.20,
+                "patches": 0.25,
+                "pitted_surface": 0.20,
+                "rolled-in_scale": 0.15,
+                "scratches": 0.25
+            },
+            "output": "v1_base_indiv_conf_inclusion_0.20"
+        },
+        # v2_augmented 실험군
+        "v2_augmented": {
+            "conf": 0.25,
+            "output": "v2_augmented"
+        },
+        "v2_augmented_indiv": {
+            "conf": {
+                "crazing": 0.15,
+                "inclusion": 0.20,
+                "patches": 0.25,
+                "pitted_surface": 0.20,
+                "rolled-in_scale": 0.18,
+                "scratches": 0.25
+            },
+            "output": "v2_augmented_indiv"
+        }
     }
 
     if os.path.exists(model_path):
-        print(f"[INFO] 클래스별 개별 임계값 적용: {CLASS_THRESHOLDS}")
-        run_failure_analysis(model_path, output_name, conf_threshold=CLASS_THRESHOLDS)
+        if args.output_name and args.output_name in PRESETS:
+            preset = PRESETS[args.output_name]
+            print(f"[INFO] 프리셋 '{args.output_name}' 적용: {preset['conf']}")
+            run_failure_analysis(model_path, preset['output'], conf_threshold=preset['conf'])
+        elif args.output_name == "all":
+            print("[INFO] 등록된 모든 실패 분석 프리셋을 일괄 가동합니다...")
+            for p_name, p_data in PRESETS.items():
+                m_ver = "v2_augmented" if "v2_augmented" in p_name else "v1_base"
+                m_path = os.path.join(REPO_ROOT, "runs", "detect", f"steel_yolov8n_{m_ver}", "weights", "best.pt")
+                if os.path.exists(m_path):
+                    run_failure_analysis(m_path, p_data['output'], conf_threshold=p_data['conf'])
+        else:
+            default_conf = 0.25
+            out_name = args.output_name if args.output_name else args.model_version
+            print(f"[INFO] 순정 기본 임계값({default_conf}) 적용: {out_name}")
+            run_failure_analysis(model_path, out_name, conf_threshold=default_conf)
     else:
         print(f"[ERROR] 지정된 모델 파일이 없습니다: {model_path}")
         print("올바른 --model-version 명칭을 입력하셨거나 --model-path 전체 경로가 유효한지 다시 확인해 주세요.")
         sys.exit(1)
+
+
 
