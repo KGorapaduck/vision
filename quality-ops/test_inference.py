@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import time
 from ultralytics import YOLO
 
 # Ensure parent directory is in sys.path to allow imports from shared and backend
@@ -23,6 +24,7 @@ logging.basicConfig(
 )
 
 def run_inference_pipeline(version_name, class_thresholds=None):
+    start_time = time.time()
     # 1. DB 초기화
     init_db()
     
@@ -126,10 +128,15 @@ def run_inference_pipeline(version_name, class_thresholds=None):
     
     insert_defect_details(db_defect_tuples)
     
+    speed_pre = float(metrics.speed.get('preprocess', 0.0))
+    speed_inf = float(metrics.speed.get('inference', 0.0))
+    speed_post = float(metrics.speed.get('postprocess', 0.0))
+
     logging.info(f"=== [추론 및 로깅 완료] ===")
     logging.info(f"Run ID: {run_id}")
     logging.info(f"총 이미지 수: {total_images}")
     logging.info(f"총 검출 결함 수: {total_defects}")
+    logging.info(f"추론 속도: {speed_inf:.2f} ms/장 (전처리: {speed_pre:.2f}ms, 후처리: {speed_post:.2f}ms)")
     logging.info(f"결함 세부 로그가 '{LOG_FILE_PATH}' 및 SQLite DB에 기록되었습니다.")
     logging.info(f"============================")
 
